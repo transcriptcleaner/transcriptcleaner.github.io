@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CleanTranscript — Safe Front-end Transcript Cleaner</title>
+  <meta name="description" content="CleanTranscript: Paste your transcript, click Clean, and get readable text + captions. 100% browser-based. Compliant with Indian privacy and intermediary guidelines."/>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0}
+    body{display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f4f6fb;padding:24px}
+    .card{width:100%;max-width:960px;background:white;border-radius:12px;box-shadow:0 8px 24px rgba(20,30,60,0.08);padding:20px}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:#445}
+    textarea{width:100%;height:220px;padding:12px;border:1px dashed #d7dbe6;border-radius:8px;font-family:monospace;resize:vertical}
+    .row{display:flex;gap:10px;margin-top:12px}
+    button{padding:10px 14px;border-radius:8px;border:0;background:#183cff;color:#fff;font-weight:600;cursor:pointer}
+    button.secondary{background:#f1f5ff;color:#102a6d}
+    pre.output{white-space:pre-wrap;background:#0f1724;color:#e6eef8;padding:12px;border-radius:8px;min-height:150px;overflow:auto}
+    .small{font-size:13px;color:#6b7280;margin-top:8px}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;gap:8px}
+    .hint{font-size:13px;color:#6b7280}
+    .checkbox{margin-top:8px;font-size:14px;color:#333;display:flex;align-items:center;gap:6px}
+    a.policy{color:#183cff;text-decoration:none;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 style="font-size: 48px;" >Transcript Cleaner - Removes filler words in transcripts</h1>
+    <p class="lead">Paste an ugly transcript (timestamps, ALL-CAPS, filler words). Click <strong>Clean</strong> to get readable paragraphs — all processing happens locally in your browser.</p>
+
+    <label for="in">Paste transcript</label>
+    <textarea id="in" placeholder="Paste your raw transcript here..."></textarea>
+
+    <div class="checkbox">
+      <input type="checkbox" id="consent" />
+      <label for="consent">I confirm I own or have permission to edit this transcript and it does not contain personal or sensitive data of others.</label>
+    </div>
+
+    <div class="row">
+      <button style="width: 100px; height: 50px;" id="clean">Clean</button>
+      <button id="downloadSrt" class="secondary">Download as .srt</button>
+      <button id="copy" class="secondary">Copy cleaned</button>
+    </div>
+
+    <div class="small">
+      <ul style="margin:8px 0 0 18px;padding:0;list-style:disc;color:#555">
+        <li>No data is uploaded or stored — all text stays in your browser (Digital Personal Data Protection Act, 2023 compliant).</li>
+        <li>Use only for your own transcripts or with permission (Section 79 safe‑harbour).</li>
+        <li>Hosted via GitHub Pages — non‑commercial static tool, not a full SaaS (per GitHub Docs).</li>
+        <li>Ads, if any, will follow Google AdSense content and language policies.</li>
+      </ul>
+    </div>
+
+    <h2 style="margin-top:18px">Output</h2>
+    <pre id="out" class="output" aria-live="polite"></pre>
+
+    <div class="footer">
+      <div class="hint">By using this site, you agree to the <a href="privacy.html" class="policy">Privacy Policy</a> & <a href="terms.html" class="policy">Terms</a>.</div>
+      <div class="hint">© 2025 CleanTranscript</div>
+    </div>
+  </div>
+
+  <!-- CDN libraries -->
+  <script src="https://unpkg.com/compromise@13.11.3/builds/compromise.min.js"></script>
+  <script src="https://unpkg.com/remove-punctuation@1.0.1/index.js"></script>
+  <script>
+    const hasCompromise = typeof nlp !== 'undefined';
+    const removePunct = window['remove-punctuation'] || (s=>s.replace(/[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/gu, '').replace(/[\[\]<>():*_~`|]/g,''));
+
+    function smartCase(sentence){
+      sentence = sentence.toLowerCase().trim();
+      if(!sentence) return '';
+      return sentence.replace(/(^|[.!?]\s+)([a-z])/g,(m,p,ch)=>p+ch.toUpperCase());
+    }
+
+    function tidyText(raw){
+      if(!raw) return '';
+      let t = raw.replace(/:[a-z_\-]+:/gi,'').replace(/\[(?:laughs|laughter|music|applause|laugh)\]/gi,' ');
+      t = t.replace(/\[?\b\d{1,2}:\d{2}(?::\d{2})?\]?/g,' ');
+      t = t.replace(/\b(u{1,2}h+|uh|um+|mm+h+|emm+|hmm+)\b/gi,' ');
+      t = t.replace(/\s{2,}/g,' ').replace(/\n{2,}/g,'\n');
+      let sentences = [];
+      if(hasCompromise){
+        try{ sentences = nlp(t).sentences().out('array'); }catch(e){ sentences = t.split(/[\.\?\!\n]+/).filter(s=>s.trim()); }
+      } else {
+        sentences = t.split(/[\.\?\!\n]+/).filter(s=>s.trim());
+      }
+      sentences = sentences.map(s=>{
+        try{ s = removePunct(s); }catch(e){}
+        const letters = s.replace(/[^A-Za-z]/g,'');
+        if(letters && letters.toUpperCase()===letters && letters.length>2) s = s.toLowerCase();
+        s = smartCase(s.trim()).replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g,'');
+        return s;
+      }).filter(Boolean);
+      const paraSize = 4;
+      let out = '';
+      for(let i=0;i<sentences.length;i+=paraSize){
+        out += sentences.slice(i,i+paraSize).join('. ') + (i+paraSize<sentences.length?'.\n\n':'');
+      }
+      return out || t.trim();
+    }
+
+    function toSrt(cleanedText){
+      if(!cleanedText) return '';
+      const sents = cleanedText.split(/\n\n+/).flatMap(p=>p.split(/\.\s+/)).map(s=>s.trim()).filter(Boolean);
+      let srt = '';
+      let startSec = 0;
+      for(let i=0;i<sents.length;i++){
+        const dur = 3.5;
+        const endSec = startSec + dur;
+        const fmt = sec => {
+          const h = String(Math.floor(sec/3600)).padStart(2,'0');
+          const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+          const s = String(Math.floor(sec%60)).padStart(2,'0');
+          const ms = String(Math.floor((sec%1)*1000)).padStart(3,'0');
+          return `${h}:${m}:${s},${ms}`;
+        };
+        srt += `${i+1}\n${fmt(startSec)} --> ${fmt(endSec)}\n${sents[i]}\n\n`;
+        startSec = endSec;
+      }
+      return srt.trim();
+    }
+
+    const input = document.getElementById('in');
+    const out = document.getElementById('out');
+    document.getElementById('clean').addEventListener('click',()=>{
+      if(!document.getElementById('consent').checked){
+        alert('Please confirm ownership and consent before cleaning.');
+        return;
+      }
+      out.textContent = tidyText(input.value);
+    });
+
+    document.getElementById('copy').addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(out.textContent);alert('Copied cleaned text');}catch(e){alert('Copy failed — select and Ctrl+C');}
+    });
+
+    document.getElementById('downloadSrt').addEventListener('click',()=>{
+      if(!document.getElementById('consent').checked){alert('Please confirm ownership and consent before download.');return;}
+      const cleaned = out.textContent || tidyText(input.value);
+      const srt = toSrt(cleaned);
+      const blob = new Blob([srt],{type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'captions.srt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    if(!localStorage.getItem('seenDemo')){
+      input.value = "00:00:01 HOST: HELLO EVERYONE UHH WELCOME TO THE SHOW [laughs] 00:00:05 GUEST: thanks, i'm excited. ummm so today we're gonna talk about AI.";
+      localStorage.setItem('seenDemo','1');
+    }
+  </script>
+</body>
+</html>
