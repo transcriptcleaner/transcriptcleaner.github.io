@@ -140,13 +140,7 @@
 
     const input = document.getElementById('in');
     const out = document.getElementById('out');
-    document.getElementById('clean').addEventListener('click',()=>{
-      if(!document.getElementById('consent').checked){
-        alert('Please confirm ownership and consent before cleaning.');
-        return;
-      }
-      out.textContent = tidyText(input.value);
-    });
+    
 
     document.getElementById('copy').addEventListener('click',async()=>{
       try{await navigator.clipboard.writeText(out.textContent);alert('Copied cleaned text');}catch(e){alert('Copy failed — select and Ctrl+C');}
